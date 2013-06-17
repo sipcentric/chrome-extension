@@ -1,5 +1,4 @@
-// Sipcentric 2013
-// Content script for Sipcentric Chrome Extension
+// Copyright (c) 2013 Sipcentric Ltd. Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 // content.js
 
 var urlBlackList = ["mail.google.com", "www.google.com", "www.google.co.uk", "google.com", "google.co.uk"];

@@ -1,3 +1,5 @@
+// Copyright (c) 2013 Sipcentric Ltd. Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
 // Show the welcome block and hide menu
 function showWelcome() {
   hide();
@@ -1393,26 +1395,26 @@ function openHelp() {
 }
 
 // Google Analytics
-//var _gaq = _gaq || [];
-//_gaq.push(['_setAccount', 'UA-#######-#']);
-//_gaq.push(['_trackPageview']);
+var _gaq = _gaq || [];
+_gaq.push(['_setAccount', 'UA-18583850-6']);
+_gaq.push(['_trackPageview']);
 
-// (function() {
-//   var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-//   ga.src = 'https://ssl.google-analytics.com/ga.js';
-//   var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-// })();
+(function() {
+  var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+  ga.src = 'https://ssl.google-analytics.com/ga.js';
+  var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
 
-// _gaq.push(['_trackEvent', 'username', localStorage['loginUsername']]);
+_gaq.push(['_trackEvent', 'username', localStorage['loginUsername']]);
 
-// var buttons = document.querySelectorAll('button');
-// for (var i = 0; i < buttons.length; i++) {
-//   buttons[i].addEventListener('click', trackButton);
-// }
+var buttons = document.querySelectorAll('button');
+for (var i = 0; i < buttons.length; i++) {
+  buttons[i].addEventListener('click', trackButton);
+}
 
-// function trackButton(e) {
-//   _gaq.push(['_trackEvent', 'button_' + e.target.id, 'clicked']);
-// };
+function trackButton(e) {
+  _gaq.push(['_trackEvent', 'button_' + e.target.id, 'clicked']);
+};
 
 $(document).ready(function() {
 

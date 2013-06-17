@@ -1,5 +1,4 @@
-// Sipcentric 2013
-// Background script for Sipcentric Chrome Extension
+// Copyright (c) 2013 Sipcentric Ltd. Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 // background.js
 
 // Globals

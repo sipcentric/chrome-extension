@@ -1,3 +1,5 @@
+// Copyright (c) 2013 Sipcentric Ltd. Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
 function getUrlParams() {
     var params = {};
     window.location.search.replace(/[?&]+([^=&]+)=([^&]*)/gi,
