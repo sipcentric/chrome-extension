@@ -14,9 +14,15 @@ function dial() {
     $("#btnDial").addClass("disabled");
     setTimeout(function(){ $("#btnDial").removeClass("disabled"); },3000);
 
+    if (document.getElementById('dialerWithhold').checked) {
+      var withhold = 1;
+    } else {
+      var withhold = 0;
+    }
+
     var call = $('#number').val();
 
-    chrome.extension.sendMessage({number: call}, function(response) {
+    chrome.extension.sendMessage({number: call, numberHold: withhold}, function(response) {
       status = response[0];
       message = response[1];
 

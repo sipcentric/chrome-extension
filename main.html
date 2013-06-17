@@ -1,38 +1,13 @@
 <!DOCTYPE html>
 <html>
+
   <head>
     <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet" media="screen">
-    <LINK href="jquery/jquery-ui-1.10.0.custom.min.css" rel="stylesheet" type="text/css">
-    <style>
-      body {
-        width: 230px;
-        height: 520px;
-        margin-bottom: 15px;
-        overflow: hidden;
-      }
-      html {overflow: auto;}
-      #logout {margin-top: 9px;}
-      .no-margin {margin-bottom: 0px;}
-      #contactModal .help-block {margin-bottom: 0px;}
-      #contactModal .control-group {margin-bottom: 0px;}
-      #contacts {max-height: 250px; overflow: auto; margin-bottom: 15px;}
-      #contactsRefresh { margin-left: 10px; margin-top: -3px; padding-top: 2px;}
-      td { width: 50px; overflow: hidden; }
-      .ui-menu-item { font-size: 12px; font-family: "Helvetica Neue",Helvetica,Arial,sans-serif; color: #333333; }
-      .ui-autocomplete-category { font-size: 12px; font-family: "Helvetica Neue",Helvetica,Arial,sans-serif; font-weight: bold; padding-left: 2px; color: #333333; }
-      .ui-state-hover, .ui-widget-content .ui-state-hover, .ui-widget-header .ui-state-hover, .ui-state-focus, .ui-widget-content .ui-state-focus, .ui-widget-header .ui-state-focus { background: #FFF; border-color: rgba(82,168,236,0.5); color: #333333; }
-      .ui-autocomplete { max-height: 200px; overflow-y: scroll; overflow-x: hidden; }
-      #smsSpacer {margin-right: 3px;}
-      #recent {max-height: 340px; overflow: auto; margin-bottom: 15px; }
-      #recentBack { margin-left: 10px; margin-top: -3px;}
-      #recent .tr { overflow: hidden; }
-      .mutedLink { color: #333; }
-      .right { float: right; }
-      .time { width: 60px; }
-
-    </style>
     <link href="bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
+    <link href="jquery/jquery-ui-1.10.0.custom.min.css" rel="stylesheet" type="text/css">
+    <link href="style.css" rel="stylesheet" media="screen" type="text/css" />
   </head>
+
   <body>
     
     <div id="mainMenu" class="navbar navbar-static-top navbar-inverse">
@@ -41,9 +16,9 @@
           <li id="menuSettings"><a id="menuSettings" href="#"><i class="icon-cog icon-white"></i></a></li>
         </ul>
         <ul class="nav">
-          <li id="menuDialer"><a id="menuDialer" href="/main.html"><i class="icon-home icon-white"></i></a></li>
-          <li id="menuBook"><a id="menuBook" href="#"><i class="icon-book icon-white"></i></a></li>
-          <li id="menuMessages"><a id="menuMessages" href="#"><i class="icon-envelope icon-white"></i></a></li>
+          <li id="menuDialer"><a id="menuDialer" href="/main.html"><i class="icon-home icon-white" alt="Dialer"></i></a></li>
+          <li id="menuBook"><a id="menuBook" href="#"><i class="icon-book icon-white" alt="Phone Book"></i></a></li>
+          <li id="menuMessages"><a id="menuMessages" href="#"><i class="icon-envelope icon-white" alt="SMS Messages"></i></a></li>
         </ul>
       </div>
     </div>
@@ -102,25 +77,26 @@
     </div>
 
     <div id="blockDialer" style="display: none;">
-
       <form>
-        <fieldset>
           <legend class="no-margin">Number Dialler</legend>
           <div id="dialerNumberGroup" class="control-group">
             <input type="text" id="dialerNumber" class="error" placeholder="Enter a number">
           </div>
-          <p><small id="dialerInfo" class="text-info"></small></p>
-          <button type="submit" id="dial" class="btn btn-info">Dial <i class="icon-chevron-right icon-white"></i></button>
-        </fieldset>
-        <br /><button id="recent" class="btn btn-mini" type="button">Recent Calls</button>
+            <label class="checkbox"><input id="dialerWithhold" type="checkbox"> <small>Withhold Caller ID</small></label>
+          <small id="dialerInfo" class="text-info"></small>
+          
+          <div id="numberDialerButtons">
+            <button type="submit" id="dial" class="btn btn-info">Dial <i class="icon-chevron-right icon-white"></i></button>
+            <button id="recent" class="btn" type="button" alt="Recent Calls"><i class="icon-align-justify"></i></button>
+          </div>
       </form>
 
     </div>
 
     <div id="blockRecent" style="display: none;">
 
-      <legend>Recent Calls <button id="recentBack" class="btn btn-mini" type="button">Back</button></legend>
-      <div id="recent">
+      <legend><button id="recentBack" class="btn btn-mini" type="button"><i class="icon-chevron-left"></i></button> Recent Calls</legend>
+      <div id="tableRecentWrapper">
       <table id="tableRecent" class="table table-striped table-condensed">
       <tr><td><small>Loading...</small></td></tr>
       </table>
@@ -140,7 +116,7 @@
         </table>
       </div>
 
-      <p><button id="addContact" class="btn btn-info" type="button">Add <i class="icon-plus-sign icon-white"></i></button></p>
+      <p><button id="addContact" class="btn btn-small btn-info" type="button">Add <i class="icon-plus icon-white"></i></button></p>
 
     </div>
 
@@ -175,35 +151,155 @@
       </div>
     </div>
 
-    <div id="blockMessages" style="display: none;">
+    <div id="blockSMS" style="display: none;">
+
+      <legend>SMS Messaging</legend>
+      <div id="blockSMSTableWrapper">
+      <table class="table table-condensed table-striped">
+        <tbody id="blockSMSTable">
+          <tr><td><small>Loading...</small></td></tr>
+        </tbody>
+       </table>
+      </div>
+
+      <form>
+        <button type="submit" id="newSMS" class="btn btn-small btn-info">New <i class="icon-plus icon-white"></i></button>
+      </form>
+
+    </div>
+
+    <div id="blockSMSThread" style="display: none;">
+    <div id="SMSConversationTitle">Conversation with:</div>
+      <legend>
+      <div id="blockSMSMessageNumber"><button id="blockSMSThreadBack" class="btn btn-mini" type="button"><i class="icon-chevron-left"></i></button><span class="" id="threadNumber"></span></div></legend>
+
+      <div id="SMSThreadTableWrapper">
+      <table id="SMSMessageTable" class="table table-condensed table-striped">
+        <tbody id="smsMessageTableBody">
+          <tr><td><small>Loading...</small></td></tr>
+        </tbody>
+       </table>
+      </div>
+
+      <div id="SMSThreadReply">
+        <div class="input-append">
+          <input id="SMSThreadReplyMessage" class="span2" id="appendedInputButton" type="text">
+          <button id="SMSThreadReplySend" class="btn" type="button">Send</button>
+        </div>
+        <p class="infoText text-info"><small id="SMSThreadReplyInfo"></small></p>
+        <div id="smsThreadFrom"></div>
+      </div>
+
+    </div>
+
+    <div id="newSMSModal" class="modal hide fade" style="display: none;">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4>New SMS</h4>
+      </div>
+      <div class="modal-body">
 
       <form>
         <fieldset>
-          <legend class="no-margin">Send SMS</legend>
-
           <div id="smsNumberGroup" class="control-group">
-            <div class="input-prepend">
-              <span class="add-on" style="width: 38px; text-align: left;">To</span>
-              <input id="smsNumber" type="text" placeholder="Number" size="23">
-            </div>
+            <!-- <div class="input-prepend"> -->
+              <!-- <span class="add-on" style="width: 33px; text-align: left;">To</span> -->
+              <div class="modalFormStyle">Recipient</div>
+              <input id="smsNumber" type="text" placeholder="Number" size="21">
+            <!-- </div> -->
           </div>
 
           <div id="smsFromGroup" class="control-group">
-            <div class="input-prepend">
-              <span class="add-on" style="width: 38px; text-align: left;">From</span>
-              <input id="smsFrom" type="text" placeholder="Name" size="23">
-            </div>
+            <div class="modalFormStyle">Send From</div>
+            <select id="newSMSFrom">
+              <option value="notset">From</option>
+            </select>
           </div>
 
           <div id="smsMessageGroup" class="control-group">
-            <textarea id="smsMessage" class="input-large" placeholder="Message (140 Max)"rows="3"></textarea>
+            <textarea id="smsMessage" class="input-large" placeholder="Message" rows="3"></textarea>
           </div>
 
-          <p><small id="smsCost" class="text-info" ></small></p>
-          <button type="submit" id="smsSend" class="btn btn-info">Send <i class="icon-envelope icon-white"></i></button>
+          <p><small id="smsCost" class="text-info"></small></p>
         </fieldset>
       </form>
 
+        <div id="newSMSModalNotification"></div>
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="newSMSSend" class="btn btn-small btn-info">Send</a>
+      </div>
+    </div>
+
+    <div id="newSMSModalNoNumbers" class="modal hide fade" style="display: none;">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4>New SMS</h4>
+      </div>
+      <div class="modal-body">
+        <p>You must have at least one SMS enabled number on your account.</p>
+        <p>Please contact us if you require assistance.</p>
+        <p>support@sipcentric.com</p>
+      </div>
+      <!--       <div class="modal-footer">
+        <a href="#" id="newSMSSend" class="btn btn-small btn-info">Send</a>
+      </div> -->
+    </div>
+
+    <div id="notifyModal" class="modal hide fade" style="display: none;">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4>Notifications</h4>
+      </div>
+      <div class="modal-body">
+
+        <p><small>Configure your notification settings here.</small></p>
+        
+        <p><div class="btn-group">
+          <button id="callNotifyOn" class="btn btn-mini">On</button>
+          <button id="callNotifyOff" class="btn btn-mini">Off</button>
+        </div>
+        <small>Incoming calls.</small></p>
+
+        <p><div class="btn-group">
+          <button id="smsNotifyOn" class="btn btn-mini">On</button>
+          <button id="smsNotifyOff" class="btn btn-mini">Off</button>
+        </div>
+        <small>New SMS received.</small></p>
+
+        <p><div id="notifyTimeInputGroup" class="control-group"><input type="text" id="notifyTimeInput" class="input-tiny"></input> <small>Notification time (1-20 Sec)</small></div></p>
+
+        <button id="notifyStatus" class="btn btn-mini">Not Connected</button>
+
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="notifySave" class="btn btn-small btn-info">Save</a>
+      </div>
+    </div>
+
+    <div id="poppingModal" class="modal hide fade" style="display: none;">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+        <h4>Screen Popping</h4>
+      </div>
+      <div class="modal-body">
+
+        <p><div class="btn-group">
+          <button id="callPopOn" class="btn btn-mini">On</button>
+          <button id="callPopOff" class="btn btn-mini">Off</button>
+        </div>
+        <small>Incoming calls.</small></p>
+
+        <p><input type="text" id="poppingURL" placeholder="http://sample.com/n?=[callerid]" class="input-large"></input>
+
+        <small class="muted" id="sampleURL"></small>
+        
+        <br /><small>Place your application URL above.<br />Use [callerid] to access the caller ID.</small></p>
+
+      </div>
+      <div class="modal-footer">
+        <a href="#" id="poppingSave" class="btn btn-small btn-info">Save</a>
+      </div>
     </div>
 
     <div id="blockSettings" style="display: none;">
@@ -217,14 +313,20 @@
           <select id="extensions">
             <option value="notset">Extension</option>
           </select>
-          
-          <br /><br /><button type="submit" id="save" class="btn btn-info">Save <i class="icon-ok icon-white"></i></button>
+ 
+          <br /><br /><button type="submit" id="save" class="btn btn-small btn-info">Save <i class="icon-ok icon-white"></i></button>
         </fieldset>
       </form>
 
       <div id="settings">
 
       <legend>Settings</legend>
+
+      <p>
+        <button id="showNotifySettings" class="btn btn-mini" type="button">Notification Settings</button>
+        <button id="showPoppingSettings" class="btn btn-mini" type="button">Screen Popping</button>
+      </p>
+
       <p>
         <div class="btn-group">
           <button id="clickableOn" class="btn btn-mini">On</button>
@@ -238,15 +340,13 @@
         <small id="resetInfo" class="text-warning">This will reset all data!</small>
         </div>
       </p>
-      <p>
-        <small id="version" class="muted">Version:</small>
-      </p>
-
+      <p><small id="helpLink" class="help">Click here for help</small></p>
+      <small id="version" class="muted">Version:</small>
       </div>
 
     </div>
 
-    <p><div id="notification"></div></p>
+    <div id="notification"></div>
 
     </div>
 
@@ -255,5 +355,7 @@
     <script src="jquery/moment.js"></script>
     <script src="bootstrap/js/bootstrap.min.js"></script>
     <script src="main.js"></script>
+
   </body>
+  
 </html>

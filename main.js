@@ -16,15 +16,18 @@ function showDialer() {
   $('#blockDialer').fadeIn(400);
   $("#menuDialer").addClass("active");
 
-  // Make the number text field focused
-  $("input:text:visible:first").focus();
   $("#dialerNumber").attr('maxlength','15');
 
   // Remove any error classes that may there
   $('#dialerNumberGroup').removeClass('error');
 
+  // Uncheck withhold checkbox just incase it is
+  $('#dialerWithhold').prop('checked', false);
+
   // Add some useful info for the user
   $('#dialerInfo').text('This will dial from extension ' + localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] +'.');
+
+  setTimeout(function(){ $('#dialerNumber').focus(); },200);
 
   // Lets see if we have any URL params
   // As the dialer screen is the default one we also use it to catch URL params for other blocks!
@@ -35,12 +38,15 @@ function showDialer() {
     $('#dialerNumber').val(getNumber.number);
   } else if (getNumber.sms) {
     // If we got a sms number we do the same as above but send the user to the messages block
+    showSMSMessages();
+    showNewSMS();
     $('#smsNumber').val(getNumber.sms);
-    showMessages();
   } else if (getNumber.contact) {
     // This will pull up a edit contact modal in the contacts block
     showBook();
     showContact(getNumber.contact);
+  } else if (getNumber.smsThread) {
+    showSMSThread(getNumber.smsThread);
   }
 
   return false;
@@ -63,38 +69,18 @@ function numbersAutoComplete(element, extensions, contacts) {
   $(element).catcomplete({ source: autoComplete });
 }
 
-function showMessages() {
-  hide();
-  showMenu();
-  numbersAutoComplete("#smsNumber", false, true);
+function outgoingAutoComplete(element) {
+  console.log(element);
+  var autoComplete = [];
 
-  $('#blockMessages').fadeIn(400);
-  $("#menuMessages").addClass("active");
-
-  // Setup some block attributes
-  $("#smsMessage").attr('maxlength','140');
-  $("#smsNumber").attr('maxlength','15');
-  $("#smsFrom").attr('maxlength','11');
-
-  // Remove any CSS classes that may be left over
-  $('#smsNumberGroup').removeClass('error');
-  $('#smsFromGroup').removeClass('error');
-  $('#smsMessageGroup').removeClass('error');
-
-  // Set the default SMS from text, we use the company name, limited to 10 chars
-  if (localStorage[localStorage['loginUsername'] + '_smsFrom'] != null) {
-    $("#smsFrom").val(localStorage[localStorage['loginUsername'] + '_smsFrom']);
-  } else {
-    var company = localStorage[localStorage['loginUsername'] + '_companyName'];
-    company = company.replace(/[^\w]/gi, '').substring(0, 10);
-    $("#smsFrom").val(company);
+  try {
+    autoComplete = JSON.parse(localStorage[localStorage['loginUsername'] + '_allowSMSFrom']);
+    console.log(autoComplete);
+  } catch (err) {
+    console.log(err);
   }
 
-  // At some point we will allow the user to send multiple messages which will increase the counter, for now this is fixed to one
-  var smsCount = "1";
-  $('#smsCost').text('This will send ' + smsCount + ' message.');
-
-  return false;
+  $(element).catcomplete({ source: autoComplete });
 }
 
 function showLogin() {
@@ -160,12 +146,27 @@ function showSettings(settings) {
   $('#blockSettings').fadeIn(400);
   $("#menuSettings").addClass("active");
   
+  if ( localStorage[localStorage['loginUsername'] + '_notifyTime'] == null) {
+    localStorage[localStorage['loginUsername'] + '_notifyTime'] = "10";
+  }
+
+  if ( localStorage[localStorage['loginUsername'] + '_prefCallNotify'] == null ) {
+    localStorage[localStorage['loginUsername'] + '_prefCallNotify'] = 1;
+  }
+
+  if ( localStorage[localStorage['loginUsername'] + '_prefSmsNotify'] == null ) {
+    localStorage[localStorage['loginUsername'] + '_prefSmsNotify'] = 1;
+  }
+
   // Get all extensions on account
   getExtensions();
   // Get account infomation like company name etc
   getInfo();
   // Lets restore all the user settings
   restoreSettings();
+  // Get credit status
+  getCredit();
+
   return false;
 }
 
@@ -184,10 +185,11 @@ function hide() {
   $('#blockLogin').hide();
   $('#blockSettings').hide();
   $('#blockDialer').hide();
-  $('#blockMessages').hide();
+  $('#blockSMS').hide();
   $('#blockWelcome').hide();
   $('#blockBook').hide();
   $('#blockRecent').hide();
+  $('#blockSMSThread').hide();
 
   // Reset menu active classes
   $("#menuDialer").removeClass("active");
@@ -218,8 +220,11 @@ function restoreSettings() {
 function saveSettings() {
   // User must set an extension before they can save.
 	if ( $('#extensions').val() != "notset" ) {
-    localStorage[localStorage['loginUsername'] + '_prefMainExtension'] = $('#extensions').val();
+    var extension = $('#extensions').val();
+
+    localStorage[localStorage['loginUsername'] + '_prefMainExtension'] = extension;
     localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] = localStorage[localStorage['loginUsername'] + '_' + $('#extensions').val()]
+
     // Set up is done, so we set the _loginSetup value to done
     localStorage[localStorage['loginUsername'] + "_loginSetup"] = 'done';
     showAlert("alert-info", "Settings Saved!", "1000");
@@ -243,10 +248,12 @@ function login() {
 
     // Start http request
     // We can use this URL to check if the auth is valid
-    var url = 'http://pbx.sipcentric.com/api/v1/customers/me';
+    var url = localStorage['baseURL'] + '/customers/me';
     var xmlhttp = new XMLHttpRequest();
     // This opens the request with username and password
-    xmlhttp.open("HEAD", url, false, username, password);
+    xmlhttp.open("HEAD", url, false);
+    var auth = window.btoa(username + ":" + password);
+    xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
 
     // We wait untill something happens
     xmlhttp.onreadystatechange=function() {
@@ -254,9 +261,12 @@ function login() {
         console.log(xmlhttp.getAllResponseHeaders())
         // If we get a 200 that means the credentials are correct
         if (xmlhttp.status === 200) {
-          console.log("Password OK! :D");
+          
           // So we save the username and password as they are correct
           storeLogin(username, password);
+
+          // Get background page to connect to stream
+          notifyConnect();
 
           // If they have completed the inital setup for that user we take them directly to the dialer block
           if ( localStorage[localStorage['loginUsername'] + "_loginSetup"] == "done") {
@@ -280,7 +290,7 @@ function login() {
         }
       }
     }
-    // This sends the actuall request to the server, but we are not posting any data so we send null
+    // This sends the actual request to the server, but we are not posting any data so we send null
     xmlhttp.send(null);
   }
   return false;
@@ -303,13 +313,16 @@ function logout() {
 
   // We send another request to force Chrome to not cache the username and password otherwise it remembers it after logoff!
   var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("HEAD", "http://pbx.sipcentric.com/api/v1/", false, localStorage["loginUsername"], null);
+  xmlhttp.open("HEAD", localStorage['baseURL'], false, localStorage["loginUsername"], null);
   xmlhttp.send(null);
 
+  // Kill websockets stream
+  chrome.extension.sendMessage('killStream');
+
   // Let the user know and force the window to close or things will go wrong!
-  showAlert("alert-info", "Logged Out!");
+  showAlert("alert-info", "Logging out.");
   // Set time out is used so the user sees the logged out message
-  setTimeout(function(){ window.close(); },2000);
+  setTimeout(function(){ window.close(); },1500);
 
 }
 
@@ -318,7 +331,9 @@ function resetSettings() {
   // We first change the button to btn-danger and change the text to make sure the user wants to do this
   if ($('#reset.btn-danger').length) {
     // Clears localstorage
+    var updateWelcome = localStorage['updateWelcome'];
     localStorage.clear();
+    localStorage['updateWelcome'] = updateWelcome;
     // Quit the window as we don't need it anymore
     setTimeout(function(){ window.close(); },500);
   } else {
@@ -358,6 +373,18 @@ function showContactAlert(type, message, time) {
   return false;
 }
 
+// This alert function is the same as above but only for the edit contact modal
+function showSMSAlert(type, message, time) {
+  if (time == null) {
+    time = 4000;
+  }
+  $('#newSMSModalNotification').text("");
+  $('#newSMSModalNotification').fadeIn(400);
+  $('#newSMSModalNotification').append($("<div class='alert " + type + " fade in'><small>" + message + "</small></div>"));
+  setTimeout(function(){ $('#newSMSModalNotification').fadeOut(400); },time);
+  return false;
+}
+
 // This is called when the user clicks on the dial button in the dial block
 function dial() {
   // We check the diabled status of the button first to stop lots of requests to api and extension
@@ -368,8 +395,14 @@ function dial() {
     // Get number from form
     var call = $('#dialerNumber').val();
 
+    if (document.getElementById('dialerWithhold').checked) {
+      var withhold = 1;
+    } else {
+      var withhold = 0;
+    }
+
     // We send the number to the background page (background.js) as we use this in some other places as well
-    chrome.extension.sendMessage({number: call}, function(response) {
+    chrome.extension.sendMessage({number: call, numberHold: withhold}, function(response) {
       // Status is the numeric code of the request
       status = response[0];
       // The mesage contains any validation errors etc
@@ -407,83 +440,6 @@ function dial() {
   return false;
 }
 
-function smsSend() {
-  // We check the diabled status of the button first to stop lots of requests to api and extra sent SMS's
-  if ($('#smsSend.disabled').length == false) {
-    $("#smsSend").addClass("disabled");
-    setTimeout(function(){ $("#smsSend").removeClass("disabled"); },4000);
-
-    // Get values from form
-    var to = $('#smsNumber').val();
-    var message = $('#smsMessage').val();
-    var from = $('#smsFrom').val();
-
-    error = null;
-
-    $('#smsNumberGroup').removeClass('error');
-    $('#smsFromGroup').removeClass('error');
-    $('#smsMessageGroup').removeClass('error');
-
-    if (to == "") {
-      $('#smsNumberGroup').addClass('error');
-      showAlert("alert-error", "To empty!");
-      error = true;
-    } else if (from == "") {
-      $('#smsFromGroup').addClass('error');
-      showAlert("alert-error", "From empty!");
-      error = true;
-    } else if (message == "") {
-      $('#smsMessageGroup').addClass('error');
-      showAlert("alert-error", "Message empty!");
-      error = true;
-    }
-    
-    // Send request to background page, just like the dial request, but with more values
-    if (error != true) {
-      chrome.extension.sendMessage({sms: to, message: message, from: from}, function(response) {
-        status = response[0];
-        message = response[1];
-
-        if (status == 200 || status == 201) {
-          showAlert("alert-info", "SMS Message sent");
-          $('#smsNumber').val("");
-          $('#smsMessage').val("");
-          $('#smsNumber').focus();
-
-          localStorage[localStorage['loginUsername'] + '_smsFrom'] = from;
-
-          // _gaq.push(['_trackEvent', 'SMS', 'Successful', localStorage[localStorage['loginUsername'] + '_companyName']]);
-
-        } else if (status == 401) {
-          showAlert("alert-error", "<strong>401!</strong> Auth Denied!");
-          setTimeout(function(){ showLogin(); },3000);
-        } else if (status == 400) {
-          showAlert("alert-error", "<small><strong>Error!</strong> " + message.message + "</small>");
-          // _gaq.push(['_trackEvent', 'SMS', '400', localStorage[localStorage['loginUsername'] + '_companyName']]);
-
-          for (var i = 0; i < message.validationErrors.length; i++) {
-            var item = message.validationErrors[i].field;
-            console.log(item);
-            if (item == 'to') {
-              $('#smsNumberGroup').addClass('error');
-            }
-            if (item == 'from') {
-              $('#smsFromGroup').addClass('error');
-            }
-            if (item == 'message') {
-              $('#smsMessageGroup').addClass('error');
-            }
-          }
-        } else {
-          showAlert("alert-error", "<strong>Oh snap!</strong> Something went wrong!");
-          // _gaq.push(['_trackEvent', 'SMS', 'Error', localStorage[localStorage['loginUsername'] + '_companyName']]);
-        }
-      });
-    }
-  }
-  return false;
-}
-
 // Lets get all extensions the user can set
 function getExtensions() {
   // Set up a new array to store the extensions
@@ -495,10 +451,12 @@ function getExtensions() {
   $('#extensions').append($("<option></option>").attr("value","notset").text("Extension"));
 
   // Set up request the get extensions
-  var endpoint = 'http://pbx.sipcentric.com/api/v1/customers/me/endpoints?type=phone';
+  var endpoint = localStorage['baseURL'] + '/customers/me/endpoints?type=phone';
   var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET", endpoint, false, localStorage["loginUsername"], localStorage["loginPassword"]);
-  
+  xmlhttp.open("GET", endpoint, false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
+
   xmlhttp.onreadystatechange=function() {
     if (xmlhttp.readyState==4) {
       console.log(xmlhttp.getAllResponseHeaders())
@@ -549,9 +507,11 @@ function getRecent() {
 
   // Currently gets the last 20 COMPANY calls then filters down to ones relevant to the extension only.
 
-  url = "http://pbx.sipcentric.com/api/v1/customers/me/calls?includeLocal=true&pageSize=20";
+  url = localStorage['baseURL'] + "/customers/me/calls?includeLocal=true&pageSize=20";
   var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET", url, true, localStorage["loginUsername"], localStorage["loginPassword"]);
+  xmlhttp.open("GET", url, true);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
   xmlhttp.onreadystatechange=function() {
     if (xmlhttp.readyState == 4) {
       if (xmlhttp.status === 200) {
@@ -570,7 +530,7 @@ function getRecent() {
             console.log(recording);
           } else {
             console.log('No recording');
-          }          
+          }
 
           if (status == "answered") {
             status = '<span class="label label-info right">Answered</span>';
@@ -601,6 +561,394 @@ function getRecent() {
   }
   xmlhttp.send(null);
 
+}
+
+function getCredit() {
+  var xmlhttp = new XMLHttpRequest();
+  xmlhttp.open("GET", localStorage['baseURL'] + '/customers/me/creditstatus', false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
+  xmlhttp.onreadystatechange=function() {
+    if (xmlhttp.readyState == 4) {
+      if (xmlhttp.status === 200) {
+        obj = JSON.parse(xmlhttp.responseText);
+        if (obj.accountType == 'prepaid') {
+          localStorage[localStorage['loginUsername'] + '_credit'] = obj.creditRemaining;
+        }
+      }
+    }
+  }
+  xmlhttp.send(null);
+}
+
+function searchContact(number) {
+  try {
+    contacts = localStorage[localStorage['loginUsername'] + '_contacts'];
+    obj = JSON.parse(contacts);
+    for (item in obj) {
+      if (number == obj[item].phoneNumber) {
+        return obj[item].name;
+      }
+    }
+  } catch(err) {
+    return;
+  }
+}
+
+function getSMSMessages() {
+
+  smsMessages = [];
+
+  url = localStorage['baseURL'] + '/customers/me/sms?pageSize=100&page=1';
+  var xmlhttp = new XMLHttpRequest();
+  xmlhttp.open("GET", url, false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
+  xmlhttp.onreadystatechange=function() {
+    if (xmlhttp.readyState == 4) {
+      if (xmlhttp.status === 200) {
+        obj = JSON.parse(xmlhttp.responseText);
+        localStorage[localStorage['loginUsername'] + '_smsTotal'] = obj.totalItems;
+        smsMessages = obj.items
+      }
+    }
+  }
+  xmlhttp.send(null);
+
+  if (JSON.stringify(smsMessages) == "[]") {
+    localStorage[localStorage['loginUsername'] + '_smsMessages'] = "";
+  } else {
+    localStorage[localStorage['loginUsername'] + '_smsMessages'] = JSON.stringify(smsMessages);
+  }
+
+  // Array for storing displayed numbers
+  smsThreads = [];
+
+  if (JSON.stringify(smsMessages) != "[]") {
+
+    // Clear table rows
+    $("#blockSMSTable tr").remove();
+
+    for (var message in smsMessages) {
+      to = smsMessages[message]['to'];
+      from = smsMessages[message]['from'];
+      date = new Date(smsMessages[message]['created']);
+      direction = smsMessages[message]['direction'];
+      body = smsMessages[message]['body'];
+
+      if (to.indexOf("44") == 0) { to = '0'.concat(to.substr(2)) }
+      if (from.indexOf("44") == 0) { from = '0'.concat(from.substr(2)) }
+      if (direction == 'in') { number = from } else if (direction == 'out') { number = to }
+      if (body == "" || body == undefined || body == "null") { body = 'Message Empty.' }
+
+      if (jQuery.inArray(number, smsThreads) !== -1) {
+        // Number message has already been displayed for this number.
+      } else {
+        // Add number to threads array so we don't display another message for this number
+        smsThreads.push(number); //smsThreads.push(from);
+        var name = searchContact(number);
+        if (name != null) {
+          $('#blockSMSTable').append('<tr><td><small><a href="?smsThread=' + number + '"">' + name + '</a><span class="right smsDate">' + moment(date).format('HH:mm ddd Do MMM') + '</span><br />' + body + '</small></td></tr>');
+        } else {
+          $('#blockSMSTable').append('<tr><td><small><a href="?smsThread=' + number + '"">' + number + '</a><span class="right smsDate">' + moment(date).format('HH:mm ddd Do MMM') + '</span><br />' + body + '</small></td></tr>');
+        }
+      }
+    }
+
+  }
+}
+
+function showSMSMessages() {
+  hide();
+  showMenu();
+  getSMSMessages();
+
+  $('#blockSMS').fadeIn(400);
+  $("#menuMessages").addClass("active");
+}
+
+function showSMSThread(threadNumber) {
+  hide();
+  showMenu();
+  $('#blockSMSThread').fadeIn(400);
+  $('#threadNumber').text(threadNumber);
+
+  data = JSON.parse(localStorage[localStorage['loginUsername'] + '_smsMessages']);
+
+  smsTo = threadNumber;
+
+  // Clear table rows
+  $("#smsMessageTableBody tr").remove();
+
+  smsMessages = [];
+  for (var message in data) {
+    smsMessages.unshift(data[message]);
+  }
+
+  for (var message in smsMessages) {
+    to = smsMessages[message]['to'];
+    from = smsMessages[message]['from'];
+    date = new Date(smsMessages[message]['created']);
+    direction = smsMessages[message]['direction'];
+    body = smsMessages[message]['body'];
+
+    if (to.indexOf("44") == 0) { to = '0'.concat(to.substr(2)) }
+    if (from.indexOf("44") == 0) { from = '0'.concat(from.substr(2)) }
+    if (direction == 'in') { 
+      number = from; flag = '<i class="icon-arrow-left"></i>';
+    } else if (direction == 'out') {
+      number = to; flag = '<i class="icon-arrow-right"></i>';
+    }
+    if (body == "" || body == undefined || body == "null") { body = 'Message Empty.' }
+
+    if (number == threadNumber) {
+      $('#smsMessageTableBody').append('<tr><td><small><span class="smsDate">' + moment(date).format('HH:mm ddd Do MMM') + '</span><span class="right">' + flag + '</span><br /><span class="break-word">' + body + '</span></small></td></tr>');
+      if (direction == 'in') { smsFrom = to; } else if (direction == 'out') { smsFrom = from; }
+      //$('#smsThreadFrom').text("Will be sent from " + smsFrom);
+    }
+  }
+
+  // Scroll to the bottom of the table
+  $("#SMSThreadTableWrapper").scrollTop($("#SMSThreadTableWrapper")[0].scrollHeight);
+
+  getOutgoingNumbers();
+  obj = JSON.parse(localStorage[localStorage['loginUsername'] + '_allowSMSFrom']);
+  if (!obj[0]) {
+    $('#SMSThreadReplyMessage').prop('disabled', true);
+    $('#SMSThreadReplySend').addClass('disabled');
+  }
+
+  var $remaining = $('#SMSThreadReplyInfo'),
+    $messages = $remaining.next();
+
+  $('#SMSThreadReplyMessage').keyup(function(){
+    var chars = this.value.length,
+    messages = Math.ceil(chars / 160),
+    remaining = messages * 160 - (chars % (messages * 160) || messages * 160);
+    if (messages == 1) { text = 'message' } else { text = 'messages' }
+    $remaining.text('(' + remaining + ') ' + messages + ' ' + text + ' will be sent from "' + smsFrom + '"');
+  });
+
+}
+
+function showNewSMS() {
+  // Clear stuff
+  $('#smsNumber').val('');
+  $('#smsMessage').val('');
+  $('#smsNumber').attr('maxlength','15');
+
+  // Get allowed outgoing SMS numbers
+  getOutgoingNumbers();
+
+  // SMS From newSMSFrom
+  obj = JSON.parse(localStorage[localStorage['loginUsername'] + '_allowSMSFrom']);
+  if (obj[0]) {
+    $('#newSMSFrom').find('option').remove();
+    //$('#newSMSFrom').append($("<option></option>").text("From"));
+    for (var item in obj) {
+      $('#newSMSFrom')
+        .append($("<option></option>")
+        .attr("value",(obj[item].label))
+        .text(obj[item].label));
+    }
+
+    // Display the modal
+    $('#newSMSModal').modal('show');
+
+    var $remaining = $('#smsCost'),
+      $messages = $remaining.next();
+
+    $('#smsMessage').keyup(function(){
+      var chars = this.value.length,
+      messages = Math.ceil(chars / 160),
+      remaining = messages * 160 - (chars % (messages * 160) || messages * 160);
+      if (messages == 1) { text = 'message' } else { text = 'messages' }
+      $remaining.text(messages + ' ' + text + ' will be sent (' + remaining + ')');
+    });
+
+    // Setup autocomplete on fields
+    numbersAutoComplete("#smsNumber", false, true);
+
+  } else {
+    $('#newSMSModalNoNumbers').modal('show');
+  }
+
+  return false;
+}
+
+function getOutgoingNumbers(type) {
+  var allowCalls = [];
+  var allowSMS = [];
+
+  var xmlhttp = new XMLHttpRequest();
+  xmlhttp.open("GET", localStorage['baseURL'] + '/customers/me/phonenumbers', false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
+  xmlhttp.onreadystatechange=function() {
+    if (xmlhttp.readyState==4) {
+      if (xmlhttp.status === 200) {
+        obj = JSON.parse(xmlhttp.responseText);
+        for (var item in obj.items) {
+          if (obj.items[item].smsEnabled == true) {
+            label = obj.items[item].number;
+            value = obj.items[item].number;
+            allowSMS.push({label: label, value: value, category: "SMS Enabled"});
+          }
+        }
+      }
+    }
+  }
+  xmlhttp.send(null);
+
+  var xmlhttp = new XMLHttpRequest();
+  xmlhttp.open("GET", localStorage['baseURL'] + '/customers/me/outgoingcallerids', false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
+  xmlhttp.onreadystatechange=function() {
+    if (xmlhttp.readyState==4) {
+      if (xmlhttp.status === 200) {
+        obj = JSON.parse(xmlhttp.responseText);
+
+        for (var item in obj.items) {
+          if (obj.items[item].allowCalls == true) {
+            label = obj.items[item].number;
+            value = obj.items[item].number;
+            allowCalls.push({label: label, value: value, category: "Numbers"});
+          }
+          if (obj.items[item].allowSms == true) {
+            label = obj.items[item].number;
+            value = obj.items[item].number;
+            allowSMS.push({label: label, value: value, category: "SMS Enabled"});
+          }
+        }
+      }
+    }
+  }
+  xmlhttp.send(null);
+
+  // Store the names and short numbers in localstorage
+  localStorage[localStorage['loginUsername'] + '_allowCallsFrom'] = JSON.stringify(allowCalls);
+  localStorage[localStorage['loginUsername'] + '_allowSMSFrom'] = JSON.stringify(allowSMS);
+
+}
+
+function quickSMSSend() {
+
+  if ($('#SMSThreadReplySend.disabled').length == false) {
+    $("#SMSThreadReplySend").addClass("disabled");
+    setTimeout(function(){ $("#SMSThreadReplySend").removeClass("disabled"); },3000);
+
+    var message = $('#SMSThreadReplyMessage').val();
+
+    if (message == "") {
+      quickSMSNotification('Message Empty!');
+    } else {
+      // Send request to background page, just like the dial request, but with more values
+      chrome.extension.sendMessage({sms: smsTo, message: message, from: smsFrom}, function(response) {
+        status = response[0];
+        message = response[1];
+
+        if (status == 200 || status == 201) {
+          $('#SMSThreadReplyMessage').val('');
+          $('#SMSThreadReplyMessage').focus();
+          quickSMSNotification('Message Sent.');
+          getSMSMessages();
+          setTimeout(function(){ showSMSThread(smsTo); },2000);
+
+        } else if (status == 401) {
+          quickSMSNotification('Auth Denied.');
+          setTimeout(function(){ showLogin(); },3000);
+        } else {
+          quickSMSNotification('Error! Something went wrong.');
+        }
+      });
+  }
+  }
+  return false;
+
+}
+
+function quickSMSNotification(message) {
+  $('#SMSThreadReplyInfo').text(message);
+  setTimeout(function(){ $('#SMSThreadReplyInfo').text(''); }, 3000);
+}
+
+function newSMSSend() {
+
+  if ($('#newSMSSend.disabled').length == false) {
+    $("#newSMSSend").addClass("disabled");
+    setTimeout(function(){ $("#newSMSSend").removeClass("disabled"); },3000);
+
+    // Get values from form
+    var to = $('#smsNumber').val();
+    var message = $('#smsMessage').val();
+    var from = $('#newSMSFrom').val();
+
+    error = null;
+
+    $('#smsNumberGroup').removeClass('error');
+    $('#smsFromGroup').removeClass('error');
+    $('#smsMessageGroup').removeClass('error');
+
+    if (to == "") {
+      $('#smsNumberGroup').addClass('error');
+      showSMSAlert("alert-error", "Please fill in all required fields!");
+      error = true;
+    } else if (from == "") {
+      $('#smsFromGroup').addClass('error');
+      showSMSAlert("alert-error", "Please fill in all required fields!");
+      error = true;
+    } else if (message == "") {
+      $('#smsMessageGroup').addClass('error');
+      showSMSAlert("alert-error", "Please fill in all required fields!");
+      error = true;
+    }
+    
+    // Send request to background page, just like the dial request, but with more values
+    if (error != true) {
+      chrome.extension.sendMessage({sms: to, message: message, from: from}, function(response) {
+        status = response[0];
+        message = response[1];
+
+        if (status == 200 || status == 201) {
+          showSMSAlert("alert-info", "SMS Message sent");
+          $('#smsNumber').val("");
+          $('#smsMessage').val("");
+          $('#smsCost').text("");
+          $('#smsNumber').focus();
+
+          localStorage[localStorage['loginUsername'] + '_smsFrom'] = from;
+
+          // _gaq.push(['_trackEvent', 'SMS', 'Successful', localStorage[localStorage['loginUsername'] + '_companyName']]);
+
+        } else if (status == 401) {
+          showSMSAlert("alert-error", "<strong>401!</strong> Auth Denied!");
+          setTimeout(function(){ showLogin(); },3000);
+        } else if (status == 400) {
+          showSMSAlert("alert-error", "<strong>Error!</strong> " + message.message);
+          // _gaq.push(['_trackEvent', 'SMS', '400', localStorage[localStorage['loginUsername'] + '_companyName']]);
+
+          for (var i = 0; i < message.validationErrors.length; i++) {
+            var item = message.validationErrors[i].field;
+            console.log(item);
+            if (item == 'to') {
+              $('#smsNumberGroup').addClass('error');
+            }
+            if (item == 'from') {
+              $('#smsFromGroup').addClass('error');
+            }
+            if (item == 'message') {
+              $('#smsMessageGroup').addClass('error');
+            }
+          }
+        } else {
+          showSMSAlert("alert-error", "<strong>Oh snap!</strong> Something went wrong!");
+          // _gaq.push(['_trackEvent', 'SMS', 'Error', localStorage[localStorage['loginUsername'] + '_companyName']]);
+        }
+      });
+    }
+  }
+  return false;
 }
 
 function displayContacts(force) {
@@ -650,7 +998,7 @@ function getContacts(force) {
 
     setTimeout(function(){ $('#contactsRefresh').removeClass('disabled'); },4000);
     contacts = [];
-    url = "http://pbx.sipcentric.com/api/v1/customers/me/phonebook?pageSize=200&page=1";
+    url = localStorage['baseURL'] + "/customers/me/phonebook?pageSize=200&page=1";
     getContactsPage(url);
     storeContacts();
   }
@@ -658,7 +1006,9 @@ function getContacts(force) {
 
 function getContactsPage(url) {
   var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET", url, false, localStorage["loginUsername"], localStorage["loginPassword"]);
+  xmlhttp.open("GET", url, false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
   xmlhttp.onreadystatechange=function() {
     if (xmlhttp.readyState == 4) {
       if (xmlhttp.status === 200) {
@@ -685,8 +1035,123 @@ function storeContacts() {
   localStorage[localStorage['loginUsername'] + '_contactsLastUpdate'] = new Date().getTime() / 1000;
 }
 
+function notifyModal() {
+  $('#notifyTimeInputGroup').removeClass('error');
+  $('#notifyModal').modal('show');
+
+  if (localStorage[localStorage['loginUsername'] + '_notificationConnection'] == "true") {
+    $('#notifyStatus').text('Connected');
+    $('#notifyStatus').addClass('disabled');
+  } else {
+    $('#notifyStatus').text('Not Connected');
+    $('#notifyStatus').removeClass('disabled');
+  }
+
+  if ( localStorage[localStorage['loginUsername'] + '_notifyTime'] != "" ) {
+    $('#notifyTimeInput').val(localStorage[localStorage['loginUsername'] + '_notifyTime']);
+  }
+
+  if ( localStorage[localStorage['loginUsername'] + '_prefCallNotify'] == 1 ) {
+    $('#callNotifyOn').addClass('btn-info');
+    $('#callNotifyOff').removeClass('btn-info');
+  } else {
+    $('#callNotifyOff').addClass('btn-info');
+    $('#callNotifyOn').removeClass('btn-info');
+  }
+
+  if ( localStorage[localStorage['loginUsername'] + '_prefSmsNotify'] == 1 ) {
+    $('#smsNotifyOn').addClass('btn-info');
+    $('#smsNotifyOff').removeClass('btn-info');
+  } else {
+    $('#smsNotifyOff').addClass('btn-info');
+    $('#smsNotifyOn').removeClass('btn-info');
+  }
+
+}
+
+function notifyConnect() {
+  chrome.extension.sendMessage({connectStream: '1'});
+}
+
+function notifySave() {
+
+  var notifyTime = $('#notifyTimeInput').val();
+  if ( notifyTime >= 1 && notifyTime <= 20 ) {
+    localStorage[localStorage['loginUsername'] + '_notifyTime'] = notifyTime;
+    $('#notifyModal').modal('hide');
+  } else {
+    $('#notifyTimeInputGroup').addClass('error');
+  }
+}
+
+function callNotify(state){
+  if ( state == 'on') {
+    $('#callNotifyOn').addClass('btn-info');
+    $('#callNotifyOff').removeClass('btn-info');
+    localStorage[localStorage['loginUsername'] + '_prefCallNotify'] = 1;
+  } else if ( state == 'off' ){
+    $('#callNotifyOff').addClass('btn-info');
+    $('#callNotifyOn').removeClass('btn-info');
+    localStorage[localStorage['loginUsername'] + '_prefCallNotify'] = 0;
+  }
+}
+
+function smsNotify(state){
+  if ( state == 'on') {
+    $('#smsNotifyOn').addClass('btn-info');
+    $('#smsNotifyOff').removeClass('btn-info');
+    localStorage[localStorage['loginUsername'] + '_prefSmsNotify'] = 1;
+  } else if ( state == 'off' ){
+    $('#smsNotifyOff').addClass('btn-info');
+    $('#smsNotifyOn').removeClass('btn-info');
+    localStorage[localStorage['loginUsername'] + '_prefSmsNotify'] = 0;
+  }
+}
+
+function poppingModal() {
+  $('#poppingModal').modal('show');
+
+  if ( localStorage[localStorage['loginUsername'] + '_prefCallPop'] == 1 ) {
+    $('#callPopOn').addClass('btn-info');
+    $('#callPopOff').removeClass('btn-info');
+  } else {
+    $('#callPopOff').addClass('btn-info');
+    $('#callPopOn').removeClass('btn-info');
+  }
+
+  if ( localStorage[localStorage['loginUsername'] + '_prefCallPopURL'] != "" ) {
+    $('#poppingURL').val(localStorage[localStorage['loginUsername'] + '_prefCallPopURL']);
+  }
+
+  $('#poppingURL').keyup(function(){
+    var callerID = '0123456789';
+    var url = $('#poppingURL').val();
+    var sample = url.replace("[callerid]",callerID);
+    $('#sampleURL').text(sample);
+  });
+
+}
+
+function poppingSave() {
+  var url = $('#poppingURL').val();
+  localStorage[localStorage['loginUsername'] + '_prefCallPopURL'] = url;
+  $('#poppingModal').modal('hide');
+}
+
+function callPop(state){
+  if ( state == 'on') {
+    $('#callPopOn').addClass('btn-info');
+    $('#callPopOff').removeClass('btn-info');
+    localStorage[localStorage['loginUsername'] + '_prefCallPop'] = 1;
+  } else if ( state == 'off' ){
+    $('#callPopOff').addClass('btn-info');
+    $('#callPopOn').removeClass('btn-info');
+    localStorage[localStorage['loginUsername'] + '_prefCallPop'] = 0;
+  }
+}
+
 function showContact(uri) {
-  localStorage['currentContactUri'] = uri;
+  localStorage[localStorage['loginUsername'] + '_currentContactUri'] = uri;
 
   $('#contactModalBanner').text('Add Contact');
   $('#contactModal').modal('show');
@@ -711,7 +1176,9 @@ function showContact(uri) {
     $('#contactModalUpdate').show();
 
     var xmlhttp = new XMLHttpRequest();
-    xmlhttp.open("GET", uri, true, localStorage["loginUsername"], localStorage["loginPassword"]);
+    xmlhttp.open("GET", uri, true);
+    var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+    xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
     xmlhttp.onreadystatechange=function() {
       if (xmlhttp.readyState == 4) {
         if (xmlhttp.status === 200) {
@@ -739,12 +1206,12 @@ function saveContact() {
 }
 
 function updateContact() {
-  var uri = localStorage['currentContactUri'];
+  var uri = localStorage[localStorage['loginUsername'] + '_currentContactUri']
   editContact("PUT", uri);
 }
 
 function deleteContact() {
-  var uri = localStorage['currentContactUri'];
+  var uri = localStorage[localStorage['loginUsername'] + '_currentContactUri']
   editContact("DELETE", uri);
 }
 
@@ -754,7 +1221,7 @@ function editContact(method, uri) {
   var speedDialRaw = $('#contactEditSpeedDial').val();
   
   if (method == "POST") {
-    uri = 'http://pbx.sipcentric.com/api/v1/customers/me/phonebook';
+    uri = localStorage['baseURL'] + '/customers/me/phonebook';
   }
 
   if (speedDialRaw != null) {
@@ -768,7 +1235,9 @@ function editContact(method, uri) {
 
   if (method == "POST") {
     var xmlhttp = new XMLHttpRequest();
-    xmlhttp.open(method, uri, false, localStorage["loginUsername"], localStorage["loginPassword"]);
+    xmlhttp.open(method, uri, false);
+    var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+    xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
     xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
     xmlhttp.send(JSON.stringify({"type": "phonebookentry","name": name,"phoneNumber": number,"speedDial": speedDial}));
 
@@ -806,7 +1275,9 @@ function editContact(method, uri) {
 
   } else if (method == "PUT") {
     var xmlhttp = new XMLHttpRequest();
-    xmlhttp.open(method, uri, false, localStorage["loginUsername"], localStorage["loginPassword"]);
+    xmlhttp.open(method, uri, false);
+    var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+    xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
     xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
     xmlhttp.send(JSON.stringify({"type": "phonebookentry","name": name,"phoneNumber": number,"speedDial": speedDial}));
 
@@ -845,7 +1316,9 @@ function editContact(method, uri) {
   } else if (method == "DELETE") {
 
     var xmlhttp = new XMLHttpRequest();
-    xmlhttp.open(method, uri, false, localStorage["loginUsername"], localStorage["loginPassword"]);
+    xmlhttp.open(method, uri, false);
+    var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+    xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
     xmlhttp.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
     xmlhttp.send(null);
 
@@ -879,9 +1352,11 @@ function clickableOff() {
 }
 
 function getInfo() {
-  var endpoint = 'http://pbx.sipcentric.com/api/v1/customers/me/';
+  var endpoint = localStorage['baseURL'] + '/customers/me/';
   var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET", endpoint, false, localStorage["loginUsername"], localStorage["loginPassword"]);
+  xmlhttp.open("GET", endpoint, false);
+  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
+  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
   
   xmlhttp.onreadystatechange=function() {
     if (xmlhttp.readyState==4) {
@@ -913,32 +1388,39 @@ function getVersion() {
   xmlhttp.send(null);
 }
 
-// Google Analytics
-var _gaq = _gaq || [];
-_gaq.push(['_setAccount', 'UA-00000000-0']);
-_gaq.push(['_trackPageview']);
-
-(function() {
-  var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-  ga.src = 'https://ssl.google-analytics.com/ga.js';
-  var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-})();
-
-_gaq.push(['_trackEvent', 'username', localStorage['loginUsername']]);
-
-var buttons = document.querySelectorAll('button');
-for (var i = 0; i < buttons.length; i++) {
-  buttons[i].addEventListener('click', trackButton);
+function openHelp() {
+  chrome.tabs.create({'url': 'http://support.sipcentric.com/customer/portal/topics/457127-chrome-extension/articles'});
 }
 
-function trackButton(e) {
-  _gaq.push(['_trackEvent', 'button_' + e.target.id, 'clicked']);
-};
+// Google Analytics
+//var _gaq = _gaq || [];
+//_gaq.push(['_setAccount', 'UA-#######-#']);
+//_gaq.push(['_trackPageview']);
+
+// (function() {
+//   var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+//   ga.src = 'https://ssl.google-analytics.com/ga.js';
+//   var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+// })();
+
+// _gaq.push(['_trackEvent', 'username', localStorage['loginUsername']]);
+
+// var buttons = document.querySelectorAll('button');
+// for (var i = 0; i < buttons.length; i++) {
+//   buttons[i].addEventListener('click', trackButton);
+// }
+
+// function trackButton(e) {
+//   _gaq.push(['_trackEvent', 'button_' + e.target.id, 'clicked']);
+// };
 
 $(document).ready(function() {
 
   // Document has loaded, lets get going...
   console.log("Sipcentric - Hello there!");
+
+  var baseURL = 'http://pbx.sipcentric.com/api/v1';
+  localStorage['baseURL'] = baseURL;
 
   // Lets hide everything after the page has loaded
   hide();
@@ -952,6 +1434,9 @@ $(document).ready(function() {
   $('#save').click(saveSettings);
   $('#clickableOn').click(clickableOn);
   $('#clickableOff').click(clickableOff);
+  $('#showNotifySettings').click(notifyModal);
+  $('#showPoppingSettings').click(poppingModal);
+  $('#helpLink').click(openHelp);
 
   // Welcome screen listeners
   $('#welcomeNext').click(showLogin);
@@ -968,11 +1453,16 @@ $(document).ready(function() {
   $('#contactsRefresh').click(function(){ if ($('#contactsRefresh.disabled').length == 0) { displayContacts(true); } });
 
   // Messages screen listeners
-  $('#smsSend').click(smsSend);
+  $('#newSMS').click(showNewSMS);
+  $('#newSMSSend').click(newSMSSend);
+  $('#blockSMSThreadBack').click(showSMSMessages);
+  $('#SMSThreadReplySend').click(quickSMSSend);
+
+  $('#SMSThreadReplyMessage').keypress(function(e) { if(e.which == 13) { quickSMSSend(); } });
 
   // Listeners for menu items
   //$('#menuDialer').click(showDialer);
-  $('#menuMessages').click(showMessages);
+  $('#menuMessages').click(showSMSMessages);
   $('#menuSettings').click(showSettings);
   $('#menuBook').click(showBook);
   $('#logout').click(logout);
@@ -985,12 +1475,27 @@ $(document).ready(function() {
   // Hide the edit contact modal
   $('#addContactModal').modal('hide');
 
+  // Notify settings listeners
+  $('#notifySave').click(notifySave);
+  $('#callNotifyOn').click(function(){ callNotify('on') });
+  $('#callNotifyOff').click(function(){ callNotify('off') });
+  $('#smsNotifyOn').click(function(){ smsNotify('on') });
+  $('#smsNotifyOff').click(function(){ smsNotify('off') });
+  $('#notifyStatus').click(notifyConnect);
+
+  // Popping settings listeners
+  $('#callPopOn').click(function(){ callPop('on') });
+  $('#callPopOff').click(function(){ callPop('off') });
+  $('#poppingSave').click(poppingSave);
+
   // Lets check what we are
   getVersion();
 
-  // We shall set up some varibles here
+  // We shall set up some global varibles here
   var timeout = null;
   var contacts = [];
+  var smsTo = null;
+  var smsFrom = null;
 
   // jQuery custom autocomplete
   $.widget( "custom.catcomplete", $.ui.autocomplete, {

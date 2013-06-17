@@ -2,7 +2,7 @@
 // Content script for Sipcentric Chrome Extension
 // content.js
 
-var urlBlackList = ["mail.google.com", "google.com", "google.co.uk"];
+var urlBlackList = ["mail.google.com", "www.google.com", "www.google.co.uk", "google.com", "google.co.uk"];
 
 function checkBlocked() {
   var url = document.location.hostname;
@@ -17,7 +17,7 @@ function checkBlocked() {
 function linkNumbers() {
   var extension = chrome.extension.getURL("call.html");
   var pattern = /((?:0|\+44)(?:[0-9]|\(|-|\)|\s(?:[0-9]|\()){8,20})/g;
-  $('body').find(':not(textarea)').replaceText( pattern, '<a title="Click to call this number" href="' + extension + '?number=$1" target="_blank">$1<\/a>' );
+  $('body').find(':not(textarea,input,a)').replaceText( pattern, '<a title="Click to call this number" href="' + extension + '?number=$1" target="_blank">$1<\/a>' );
 }
 
 $(document).ready(function() {
