@@ -35,6 +35,6 @@ If you want to install the code to work on:
 Developers
 ----------
 
-A google group will be live soon. [Sipcentric Developers](https://groups.google.com/a/sipcentric.com/forum/#!forum/developers).
+A google group will be live soon. [Sipcentric Developers](https://groups.google.com/forum/#!forum/sipcentric-developers).
 
 We are also on irc.freenode.net [##sipcentric](http://webchat.freenode.net/?channels=sipcentric&uio=d4)
