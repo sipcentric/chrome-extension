@@ -91,10 +91,12 @@ $(document).ready(function() {
 
 	var getNumber = getUrlParams();
   	
-  	if (getNumber.number) {
-	  	var number = getNumber.number.replace(/(?:\+44|\(|\)|-|\s)/g, "");
-	  	number = number.replace(/%20/g,"");
-	    $('#number').val(number);
-  	}
+  if (getNumber.number) {
+    var number = decodeURIComponent(getNumber.number);
+    number = number.replace("\(0\)","");
+    number = number.replace("\+44","0");
+    number = number.replace(/\D/g,"");
+    $('#number').val(number);
+  }
 
 });

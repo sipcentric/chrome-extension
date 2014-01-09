@@ -142,17 +142,24 @@ function setupNotifications() {
               setTimeout(function(){ pop.cancel(); },time);
 
             } else if ( notificationCallEnabled() == true ) {
-
               time = localStorage[localStorage['loginUsername'] + '_notifyTime'] * 1000;
               if (json.values['callerIdNumber'] != null) {
+
                 message = json.values['callerIdNumber'] + " - Click here to close.";
                 if (json.values['callerIdName'] != '' && json.values['callerIdName'] != null) {
                   title = 'Incoming Call from "' + json.values['callerIdName'] + '"';
                 } else {
                   title = "Incoming Call from " + json.values['callerIdNumber'];
                 }
+
               } else {
-                title = "Incoming Call";
+
+              	if (json.values['callerIdName'] != '' && json.values['callerIdName'] != null) {
+                  title = 'Incoming Call from "' + json.values['callerIdName'] + '"';
+                } else {
+                  title = "Incoming Call";
+                }
+
                 message = "Click here to close.";
               }
 
