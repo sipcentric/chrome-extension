@@ -8,6 +8,8 @@ var attempts = 0;
 var streamCheck = 0;
 var streamSuspended = false;
 
+var notification_timeout = 5; // Minutes
+
 // Add listener for messages passed from the content.js script
 chrome.extension.onMessage.addListener(
   function(request, sender, sendResponse) {
@@ -18,6 +20,12 @@ chrome.extension.onMessage.addListener(
     if (request == 'killStream') { socket.unsubscribe(); }
   }
 );
+
+function log(message) {
+  if (localStorage.getItem('logging') == 'true') {
+    console.log(message);
+  }
+}
 
 function getRandomArbitary (min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -31,7 +39,7 @@ function setupNotifications() {
   try {
     socket.unsubscribe();
   } catch (e) {
-    //console.log("Can't unsubscribe");
+    //log("Can't unsubscribe");
   }
 
   if (localStorage['loginValid'] == "true") {
@@ -53,7 +61,7 @@ function setupNotifications() {
                     transport : 'streaming' };
 
     stream.onOpen = function(response) {
-      console.log('[SCCE] Stream flowing.');
+      log('[SCCE] Stream flowing.');
       localStorage[localStorage['loginUsername'] + '_notificationConnection'] = true;
     };
 
@@ -61,15 +69,15 @@ function setupNotifications() {
     // }
     
     stream.onError = function(response) {
-      console.log('[SCCE] Stream has dried up. (Error)');
+      log('[SCCE] Stream has dried up. (Error)');
       localStorage[localStorage['loginUsername'] + '_notificationConnection'] = false;
 
       if (attempts < 5) {
-        console.log('[SCCE] Going to reconnect in 20 secconds. Try: ' + attempts)
+        log('[SCCE] Going to reconnect in 20 secconds. Try: ' + attempts)
         attempts += 1;
         setTimeout(function(){ if (!streamSuspended) {setupNotifications()}; },20000);
       } else if (!streamSuspended) {
-        console.log('[SCCE] Max attempts reached.');
+        log('[SCCE] Max attempts reached.');
         var errorNotification = webkitNotifications.createNotification('images/icon48.png', 'Connection Error', "Can't connect to the notifications server. Click here to reconnect.");
         streamSuspended = true;
         errorNotification.onclick = function(){
@@ -86,88 +94,26 @@ function setupNotifications() {
       var message = response.responseBody;
       localStorage[localStorage['loginUsername'] + '_streamFlow'] = new Date().getTime();
 
-      //console.log(response);
-
       try {
         var json = jQuery.parseJSON(message);
 
-        // For debug
-        //console.log(json);
-
         if (json.event == "smsreceived") {
-
-          console.log('[SCCE] SMS Received. From: ' + json.values['from'] + ' Message: ' + json.values['excerpt']);
-          if ( notificationSmsEnabled() == true ) {          
-            time = localStorage[localStorage['loginUsername'] + '_notifyTime'] * 1000;
-
-            var pop = webkitNotifications.createNotification('images/icon48.png', 'New SMS from ' + json.values['from'], json.values['excerpt'] );
-            pop.onclick = function(){ pop.cancel(); }
-            pop.show();
-            setTimeout(function(){ pop.cancel(); },time);
+          
+          if (notificationSmsEnabled() == true) {
+            smsnotification({ from: json.values['from'],
+                              message: json.values['excerpt'] });
           }
 
         } else if (json.event == "incomingcall") {
 
           if (localStorage['baseURL'] + json.values['endpoint'] == localStorage[localStorage['loginUsername'] + '_prefMainExtension']) {
-          
-            console.log('[SCCE] Incoming Call. From: ' + json.values['callerIdNumber']);
 
-            if ( popCallEnabled() == true ) {
+            if (notificationCallEnabled() == true) {
 
-              time = localStorage[localStorage['loginUsername'] + '_notifyTime'] * 1000;
-              if (json.values['callerIdNumber'] != null) {
-                message = json.values['callerIdNumber'] + " - Click here to open.";
-                if (json.values['callerIdName'] != '' && json.values['callerIdName'] != null) {
-                  title = 'Incoming Call from "' + json.values['callerIdName'] + '"';
-                } else {
-                  title = "Incoming Call from " + json.values['callerIdNumber'];
-                }
-              } else {
-                title = "Incoming Call";
-                message = "Click here to close.";
-              }
-
-              var pop = webkitNotifications.createNotification('images/icon48.png', title, message );
-
-              if (json.values['callerIdNumber'] != null || json.values['callerIdNumber'] != '') {
-                number = json.values['callerIdNumber'];
-                url = localStorage[localStorage['loginUsername'] + '_prefCallPopURL'];
-                open = url.replace("[callerid]",number);
-                pop.onclick = function(){ chrome.tabs.create({'url':open}); pop.cancel(); }
-              } else {
-                pop.onclick = function(){ pop.cancel(); }
-              }
-
-              pop.show();
-              setTimeout(function(){ pop.cancel(); },time);
-
-            } else if ( notificationCallEnabled() == true ) {
-              time = localStorage[localStorage['loginUsername'] + '_notifyTime'] * 1000;
-              if (json.values['callerIdNumber'] != null) {
-
-                message = json.values['callerIdNumber'] + " - Click here to close.";
-                if (json.values['callerIdName'] != '' && json.values['callerIdName'] != null) {
-                  title = 'Incoming Call from "' + json.values['callerIdName'] + '"';
-                } else {
-                  title = "Incoming Call from " + json.values['callerIdNumber'];
-                }
-
-              } else {
-
-              	if (json.values['callerIdName'] != '' && json.values['callerIdName'] != null) {
-                  title = 'Incoming Call from "' + json.values['callerIdName'] + '"';
-                } else {
-                  title = "Incoming Call";
-                }
-
-                message = "Click here to close.";
-              }
-
-              var pop = webkitNotifications.createNotification('images/icon48.png', title, message );
-              pop.onclick = function(){ pop.cancel(); }
-              pop.show();
-              setTimeout(function(){ pop.cancel(); },time);
-
+              callnotification({ number: json.values['callerIdNumber'],
+                                 name: json.values['callerIdName'],
+                                 extension: localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] });
+            
             }
 
           }
@@ -184,6 +130,165 @@ function setupNotifications() {
   }
 }
 
+function smsnotification(context) {
+
+  options = {
+    'type': 'basic',
+    'iconUrl': 'images/notification.png',
+    'isClickable': true
+  }
+
+  options['title'] = 'New message from ' + context.from;
+  options['message'] = context.message + '...';
+
+  chrome.notifications.create(notificationId='', options=options, function(id) {
+
+    log_notification(true, id);
+
+    setTimeout( function() {
+
+      log_notification(false, id);
+
+    }, 60000 * notification_timeout);
+
+  });
+}
+
+function callnotification(context) {
+
+  var nopop = false
+
+  options = {
+    'type': 'basic',
+    'iconUrl': 'images/notification.png',
+    'isClickable': true
+  }
+
+  options['title'] = 'Incoming call to ' + context.extension;
+
+  if (!context.number) {
+
+    if (context.name) {
+      options['message'] = 'Anonymous caller (' + context.name + ')';
+    } else {
+      options['message'] = 'Anonymous caller';
+    }
+    nopop = true;
+
+  } else if (context.number == 'anonymous') {
+
+    if (context.name) {
+      options['message'] = 'Anonymous caller (' + context.name + ')';
+    } else {
+      options['message'] = 'Anonymous caller';
+    }
+    nopop = true;
+
+  } else {
+
+    options['message'] = 'From ' + context.name + ' (' + context.number + ')';
+
+  }
+
+  if ( popCallEnabled() == true && nopop == false) {
+    domain = url_domain(localStorage[localStorage['loginUsername'] + '_prefCallPopURL']);
+
+    options['buttons'] = [{"title": "Open in " + domain }]
+  }
+
+  chrome.notifications.create(notificationId='', options=options, function(id) {
+
+    localStorage[id] = JSON.stringify({'type': 'incomingcall', 'number': context.number, 'name': context.name, 'extension': context.extension});
+    log_notification(true, id);
+
+    setTimeout( function() {
+
+      log_notification(false, id);
+
+    }, 60000 * notification_timeout);
+
+  });
+
+}
+
+chrome.notifications.onButtonClicked.addListener(function(notificationId, buttonIndex) {
+
+  data = JSON.parse(localStorage[notificationId]);
+
+  if (data['type'] == 'incomingcall') {
+
+    number = data['number'];
+
+    url = localStorage[localStorage['loginUsername'] + '_prefCallPopURL'];
+
+    open = url.replace("[callerid]", number);
+
+    chrome.tabs.create({'url': open});
+
+  }
+
+});
+
+// chrome.notifications.onClosed.addListener(function(notificationId, buttonIndex) {
+//   log('User closed notification');
+// });
+
+function log_notification(state, id) {
+
+  if (localStorage.getItem('notifications') === null) {
+    var notifications = [];
+  } else {
+    var notifications = JSON.parse(localStorage['notifications']);
+  }
+
+  if (state == true) {
+
+    notifications.push(id);
+
+    log('Logged notification ' + id);
+
+  } else if (state == false) {
+
+    localStorage.removeItem(id);
+
+    chrome.notifications.clear(id, function() {
+      log('Cleared notification ' + id);
+    });
+
+    var item = notifications.indexOf(id);
+    
+    if (item > -1) {
+      notifications.splice(item, 1);
+    }
+
+    log('Removed logged notification ' + id);
+
+  } else if (state == 'clear') {
+
+    for (var i in notifications) {
+
+      log('Removing: ' + notifications[i]);
+
+      localStorage.removeItem(notifications[i]);
+
+    }
+
+    notifications = [];
+
+  }
+
+  localStorage['notifications'] = JSON.stringify(notifications);
+
+}
+
+function url_domain(data) {
+
+  var a = document.createElement('a');
+  a.href = data;
+  return a.hostname;
+
+}
+
 function notificationCallEnabled() { if (localStorage[localStorage['loginUsername'] + '_prefCallNotify'] == 1) { return true; } else { return false; } }
 
 function notificationSmsEnabled() { if (localStorage[localStorage['loginUsername'] + '_prefSmsNotify'] == 1) { return true; } else { return false; } }
@@ -194,7 +299,7 @@ function popCallEnabled() { if (localStorage[localStorage['loginUsername'] + '_p
 
 function sendSMS(number, message, from) {
 
-  console.log('[SCCE] Send SMS. Number: ' + number + ' From: ' + from + ' Message: ' + message);
+  log('[SCCE] Send SMS. Number: ' + number + ' From: ' + from + ' Message: ' + message);
 
   var xmlhttp = new XMLHttpRequest();
   xmlhttp.open("POST", localStorage['baseURL'] + "/customers/me/sms", false);
@@ -219,8 +324,8 @@ function sendSMS(number, message, from) {
 
 function tryCall(number, numberHold) { 
 
-  console.log('makeCall - Number: ' + number);
-  console.log('[SCCE] Call number. Number: ' + number);
+  log('makeCall - Number: ' + number);
+  log('[SCCE] Call number. Number: ' + number);
 
   if (numberHold == 1) {
     number = '*67' + number;
@@ -274,10 +379,10 @@ function checkStream() {
     now = new Date().getTime();
 
     if ( now - parseInt(last) > 70000 ) {
-      console.log('[SCCE] Stream connection timed out.');
+      log('[SCCE] Stream connection timed out.');
       setupNotifications();
     } else {
-      //console.log('[SCCE] No timeout.');
+      //log('[SCCE] No timeout.');
     }
   }
 }
@@ -286,20 +391,33 @@ function checkVersion() {
   // The updateCode is NOT the version number, just a string we have to match!
 
   // WARNING THIS WILL CLEAR THE LOCALSTORAGE IF THE UPDATE CODE DOES NOT MATCH!
-  var updateCode = '30a04cf33ee91a3ecf4b75c71268f316'; // Code for V1.1.0
+  // var updateCode = '30a04cf33ee91a3ecf4b75c71268f316'; // Code for V1.1.0
+  var updateCode = '184e62de39dc3ec565c84837ea6a4d75'; // Code for V1.1.8
   
-  var url = 'http://www.sipcentric.com/2013/06/google-chrome-extension-1-1-is-here';
-  var updateMessage = 'New features include call notifications, screen popping and a new SMS messaging design. Click here to find out more.';
+  // var url = 'http://www.sipcentric.com/2013/06/google-chrome-extension-1-1-is-here';
+  // var updateMessage = 'New features include call notifications, screen popping and a new SMS messaging design. Click here to find out more.';
 
   if (localStorage['updateWelcome'] != updateCode) {
-    if (localStorage[localStorage['loginUsername'] + '_loginSetup'] == 'done') {
-      var pop = webkitNotifications.createNotification('images/icon48.png', 'Sipcentric for Chrome Updated!', updateMessage);
-      pop.onclick = function(){ chrome.tabs.create({'url':url}); pop.cancel(); }
-      pop.show();
-      setTimeout(function(){ pop.cancel(); },'40000');
-    }
+    // if (localStorage[localStorage['loginUsername'] + '_loginSetup'] == 'done') {
+    //   var pop = webkitNotifications.createNotification('images/icon48.png', 'Sipcentric for Chrome Updated!', updateMessage);
+    //   pop.onclick = function(){ chrome.tabs.create({'url':url}); pop.cancel(); }
+    //   pop.show();
+    //   setTimeout(function(){ pop.cancel(); },'40000');
+    // }
+
     // WARNING THIS WILL CLEAR THE LOCALSTORAGE IF THE UPDATE CODE DOES NOT MATCH!
-    localStorage.clear();
+    // localStorage.clear();
+
+    if (localStorage[localStorage['loginUsername'] + '_prefMainExtension'] != null) {
+
+      var ext = localStorage[localStorage["loginUsername"] + '_prefMainExtension'];
+      localStorage[localStorage["loginUsername"] + '_prefMainExtension'] = ext.replace("http","https");
+
+      localStorage["baseURL"] = 'https://pbx.sipcentric.com/api/v1';
+
+      setupNotifications();
+    }
+
     localStorage['updateWelcome'] = updateCode;
   }
 }
@@ -325,8 +443,12 @@ function contextDial(){
 }
 
 $(document).ready(function() {
+
   setupNotifications();
+  log_notification('clear');
+
   contextDial();
   setupCheck();
   checkVersion();
+
 });

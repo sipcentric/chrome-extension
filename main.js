@@ -397,6 +397,17 @@ function dial() {
     // Get number from form
     var call = $('#dialerNumber').val();
 
+    if (call == 'enablelog') {
+      $('#dialerNumber').val('');
+      localStorage['logging'] = 'true';
+      return false;
+    }
+    if (call == 'disablelog') {
+      $('#dialerNumber').val('');
+      localStorage.removeItem('logging');
+      return false;
+    }
+
     if (document.getElementById('dialerWithhold').checked) {
       var withhold = 1;
     } else {
@@ -534,13 +545,13 @@ function getRecent() {
             console.log('No recording');
           }
 
-          if (status == "answered") {
+          if (status == "answered" || status == "ANSWERED") {
             status = '<span class="label label-info right">Answered</span>';
-          } else if (status == "busy") {
+          } else if (status == "busy" || status == "BUSY") {
             status = '<span class="label right">Busy</span>';
-          } else if (status == "no-answer") {
+          } else if (status == "no-answer" || status == "NO_ANSWER") {
             status = '<span class="label right">No Answer</span>';
-          } else if (status == "failed") {
+          } else if (status == "failed" || status == "FAILED") {
             status = '<span class="label label-important right">Failed</span>';
           } else {
             status = '<span class="label right">' + status + '</span>';
@@ -640,7 +651,7 @@ function getSMSMessages() {
 
       if (to.indexOf("44") == 0) { to = '0'.concat(to.substr(2)) }
       if (from.indexOf("44") == 0) { from = '0'.concat(from.substr(2)) }
-      if (direction == 'in') { number = from } else if (direction == 'out') { number = to }
+      if (direction.toUpperCase() == 'IN') { number = from } else if (direction.toUpperCase() == 'OUT') { number = to }
       if (body == "" || body == undefined || body == "null") { body = 'Message Empty.' }
 
       if (jQuery.inArray(number, smsThreads) !== -1) {
@@ -696,16 +707,16 @@ function showSMSThread(threadNumber) {
 
     if (to.indexOf("44") == 0) { to = '0'.concat(to.substr(2)) }
     if (from.indexOf("44") == 0) { from = '0'.concat(from.substr(2)) }
-    if (direction == 'in') { 
+    if (direction.toUpperCase() == 'IN') { 
       number = from; flag = '<i class="icon-arrow-left"></i>';
-    } else if (direction == 'out') {
+    } else if (direction.toUpperCase() == 'OUT') {
       number = to; flag = '<i class="icon-arrow-right"></i>';
     }
     if (body == "" || body == undefined || body == "null") { body = 'Message Empty.' }
 
     if (number == threadNumber) {
       $('#smsMessageTableBody').append('<tr><td><small><span class="smsDate">' + moment(date).format('HH:mm ddd Do MMM') + '</span><span class="right">' + flag + '</span><br /><span class="break-word">' + body + '</span></small></td></tr>');
-      if (direction == 'in') { smsFrom = to; } else if (direction == 'out') { smsFrom = from; }
+      if (direction.toUpperCase() == 'IN') { smsFrom = to; } else if (direction.toUpperCase() == 'OUT') { smsFrom = from; }
       //$('#smsThreadFrom').text("Will be sent from " + smsFrom);
     }
   }
@@ -1395,33 +1406,31 @@ function openHelp() {
 }
 
 // Google Analytics
-// var _gaq = _gaq || [];
-// _gaq.push(['_setAccount', '']);
-// _gaq.push(['_trackPageview']);
+var _gaq = _gaq || [];
+_gaq.push(['_setAccount', 'UA-18583850-6']);
+_gaq.push(['_trackPageview']);
 
-// (function() {
-//   var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-//   ga.src = 'https://ssl.google-analytics.com/ga.js';
-//   var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-// })();
+(function() {
+  var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+  ga.src = 'https://ssl.google-analytics.com/ga.js';
+  var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
 
-// _gaq.push(['_trackEvent', 'username', localStorage['loginUsername']]);
+var buttons = document.querySelectorAll('button');
+for (var i = 0; i < buttons.length; i++) {
+  buttons[i].addEventListener('click', trackButton);
+}
 
-// var buttons = document.querySelectorAll('button');
-// for (var i = 0; i < buttons.length; i++) {
-//   buttons[i].addEventListener('click', trackButton);
-// }
-
-// function trackButton(e) {
-//   _gaq.push(['_trackEvent', 'button_' + e.target.id, 'clicked']);
-// };
+function trackButton(e) {
+  _gaq.push(['_trackEvent', 'button_' + e.target.id, 'clicked']);
+};
 
 $(document).ready(function() {
 
   // Document has loaded, lets get going...
   console.log("Sipcentric - Hello there!");
 
-  var baseURL = 'http://pbx.sipcentric.com/api/v1';
+  var baseURL = 'https://pbx.sipcentric.com/api/v1';
   localStorage['baseURL'] = baseURL;
 
   // Lets hide everything after the page has loaded

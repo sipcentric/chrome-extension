@@ -1,7 +1,7 @@
 {
 
   "name": "Sipcentric for Chrome™",
-  "version": "1.1.7",
+  "version": "1.1.11",
   "manifest_version": 2,
   "description": "Allows you to make calls on your extension, send SMS messages, access your company phone book and view recent calls.",
   "content_security_policy": "script-src 'self' https://ssl.google-analytics.com; object-src 'self'",
@@ -26,11 +26,13 @@
 
   "web_accessible_resources": [
     "images/icon48.png",
-    "call.html"
+    "call.html",
+    "jquery/jquery.min.js",
+    "jquery/jquery.min.map"
   ],
 
   "background": {
-    "scripts": ["jquery/jquery.min.js","jquery/jquery.atmosphere.js","background.js"]
+    "scripts": ["jquery/jquery.min.js","jquery/jquery.min.map","jquery/jquery.atmosphere.js","background.js"]
   },
 
   "content_scripts": [

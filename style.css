@@ -110,6 +110,7 @@ body {
 #blockSMSTableWrapper {
   max-height: 300px;
   overflow: auto;
+  word-break: break-word;
   margin-bottom: 20px;
 }
 
