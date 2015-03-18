@@ -1,7 +1,7 @@
 // Copyright (c) 2013 Sipcentric Ltd. Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 // content.js
 
-var urlBlackList = ["mail.google.com", "google.com", "google.co.uk", "secure.helpscout.net/mailbox"];
+var urlBlackList = ["mail.google.com", "google.com", "google.co.uk", "secure.helpscout.net/mailbox", "yahoo.com"];
 
 function checkBlocked() {
 

@@ -55,6 +55,10 @@ body {
   width: 230px;
 }
 
+#loadingModal {
+  margin-top: 100px;
+}
+
 #SMSConversationTitle {
   color: #6F6F6F;
   font-size: 12px;

@@ -67,7 +67,7 @@ function setupNotifications() {
 
     // stream.onClose = function(response) {
     // }
-    
+
     stream.onError = function(response) {
       log('[SCCE] Stream has dried up. (Error)');
       localStorage[localStorage['loginUsername'] + '_notificationConnection'] = false;
@@ -85,7 +85,7 @@ function setupNotifications() {
           errorNotification.cancel();
           setupNotifications();
         }
-        
+
         errorNotification.show();
       }
     };
@@ -98,7 +98,7 @@ function setupNotifications() {
         var json = jQuery.parseJSON(message);
 
         if (json.event == "smsreceived") {
-          
+
           if (notificationSmsEnabled() == true) {
             smsnotification({ from: json.values['from'],
                               message: json.values['excerpt'] });
@@ -110,15 +110,55 @@ function setupNotifications() {
 
             if (notificationCallEnabled() == true) {
 
-              callnotification({ number: json.values['callerIdNumber'],
-                                 name: json.values['callerIdName'],
-                                 extension: localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] });
-            
+              var name = json.values['callerIdName'];
+
+              if (localStorage[localStorage['loginUsername'] + '_prefCallLookupURL']) {
+
+                var baseUrl = localStorage[localStorage['loginUsername'] + '_prefCallLookupURL'];
+                var url = baseUrl.replace('[callerid]', json.values['callerIdNumber']);
+
+                $.ajax({
+                  url: url,
+                  type: 'GET'
+                }).done(function(response) {
+
+                  name = response || json.values['callerIdName'];
+
+                  callnotification({
+                    number: json.values['callerIdNumber'],
+                    name: name,
+                    extension: localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']
+                  });
+
+                  return true;
+
+                }).error(function(response) {
+
+                  log('LookupURL Error: ' + response.status);
+
+                  callnotification({
+                    number: json.values['callerIdNumber'],
+                    name: name,
+                    extension: localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']
+                  });
+
+                  return false;
+
+                });
+
+              } else {
+
+                callnotification({ number: json.values['callerIdNumber'],
+                                   name: json.values['callerIdName'],
+                                   extension: localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] });
+
+              }
+
             }
 
           }
         }
-        
+
       } catch (e) {
         return;
       }
@@ -256,7 +296,7 @@ function log_notification(state, id) {
     });
 
     var item = notifications.indexOf(id);
-    
+
     if (item > -1) {
       notifications.splice(item, 1);
     }
@@ -315,14 +355,36 @@ function sendSMS(number, message, from) {
   var status = xmlhttp.status;
 
   var message;
-  if (xmlhttp.responseText != null) { 
+  if (xmlhttp.responseText != null) {
     message = JSON.parse(xmlhttp.responseText);
   }
 
   return [status, message];
+
+  // var handle = new Request("/customers/me/sms");
+
+  // handle.type = "POST";
+
+  // handle.data = {
+  //   type: "smsmessage",
+  //   to: number,
+  //   from: from,
+  //   body: message
+  // }
+
+  // handle.success(function(response, status){
+  //   return [201, response];
+  // });
+
+  // handle.failed(function(response, status){
+  //   return [status, response];
+  // });
+
+  // handle.go();
+
 }
 
-function tryCall(number, numberHold) { 
+function tryCall(number, numberHold) {
 
   log('makeCall - Number: ' + number);
   log('[SCCE] Call number. Number: ' + number);
@@ -362,7 +424,7 @@ function makeCall(number) {
     return [status, "Not logged in!"];
   } else {
     var message;
-    if (xmlhttp.responseText) { 
+    if (xmlhttp.responseText) {
         message = JSON.parse(xmlhttp.responseText);
     }
     return [status, message];
@@ -393,7 +455,7 @@ function checkVersion() {
   // WARNING THIS WILL CLEAR THE LOCALSTORAGE IF THE UPDATE CODE DOES NOT MATCH!
   // var updateCode = '30a04cf33ee91a3ecf4b75c71268f316'; // Code for V1.1.0
   var updateCode = '184e62de39dc3ec565c84837ea6a4d75'; // Code for V1.1.8
-  
+
   // var url = 'http://www.sipcentric.com/2013/06/google-chrome-extension-1-1-is-here';
   // var updateMessage = 'New features include call notifications, screen popping and a new SMS messaging design. Click here to find out more.';
 

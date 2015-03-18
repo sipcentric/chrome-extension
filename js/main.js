@@ -1,4 +1,18 @@
+// Sipcentric Chrome Extension - main.js
 // Copyright (c) 2013 Sipcentric Ltd. Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
+var loadingModal;
+
+function loadingState(state) {
+  if (state == true) {
+    loadingModal = setTimeout(function(){
+      $('#loadingModal').modal('show');
+    }, 500);
+  } else if (state == false) {
+    clearInterval(loadingModal);
+    $('#loadingModal').modal('hide');
+  }
+}
 
 // Show the welcome block and hide menu
 function showWelcome() {
@@ -463,52 +477,35 @@ function getExtensions() {
   // Add the default "Extension" option
   $('#extensions').append($("<option></option>").attr("value","notset").text("Extension"));
 
-  // Set up request the get extensions
-  var endpoint = localStorage['baseURL'] + '/customers/me/endpoints?type=phone&pageSize=100';
-  var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET", endpoint, false);
-  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
-  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
+  var handle = new Request("/customers/me/endpoints");
 
-  xmlhttp.onreadystatechange=function() {
-    if (xmlhttp.readyState==4) {
-      console.log(xmlhttp.getAllResponseHeaders())
-      if (xmlhttp.status === 200) {
- 				obj = JSON.parse(xmlhttp.responseText);
-        // Cycle the items and add them as options
- 				for (var item in obj.items) {
-          // Add the shortnumber and name to localExtensions
-          lable = obj.items[item].name + ' - ' + obj.items[item].shortNumber;
-          value = obj.items[item].shortNumber;
-          localExtensions.push({label: lable, value: value, category: "Extensions"});
+  handle.params['type'] = "Phone";
+  handle.pageSize(100);
 
-          localStorage[localStorage['loginUsername'] + '_' + obj.items[item].uri] = obj.items[item].shortNumber;
-					$('#extensions')
-        	.append($("<option></option>")
-        	.attr("value",obj.items[item].uri)
-        	.text(obj.items[item].shortNumber + " - " + obj.items[item].name));
-				}
-        // Store the names and short numbers in localstorage
-        localStorage[localStorage['loginUsername'] + '_localExtensions'] = JSON.stringify(localExtensions);
-      } else {
-        // Something went wrong
-        console.log("Getting extensions failed :(");
-      }
+  handle.loading(function(state){
+    loadingState(state);
+  });
+
+  handle.success(function(response, status){
+    
+    for (i in response['items']) {
+      var item = response['items'][i];
+      
+      lable = item['name'] + ' - ' + item['shortNumber'];
+      value = item['shortNumber'];
+      localExtensions.push({label: lable, value: value, category: "Extensions"});
+
+      localStorage[localStorage['loginUsername'] + '_' + item['uri']] = item['shortNumber'];
+      $('#extensions').append($("<option></option>").attr("value",item['uri']).text(item['shortNumber'] + " - " + item['name']));
     }
-  }
-  xmlhttp.send(null);
+
+    localStorage[localStorage['loginUsername'] + '_localExtensions'] = JSON.stringify(localExtensions);
+
+  });
+
+  handle.go();
 
   return false;
-}
-
-// Not used anywhere yet, will allow a loading to display on slow http requests
-function httpLoading(state) {
-  if (state == true) {
-    timeout = setTimeout(function(){ $('#loading').modal('show'); },1000);
-  } else if (state == false) {
-    clearTimeout(timeout);
-    setTimeout(function(){ $('#loading').modal('hide'); },1000);
-  }
 }
 
 function displayRecent() {
@@ -518,61 +515,69 @@ function displayRecent() {
 
 function getRecent() {
 
-  // Currently gets the last 20 COMPANY calls then filters down to ones relevant to the extension only.
+  var handle = new Request("/customers/me/calls");
 
-  url = localStorage['baseURL'] + "/customers/me/calls?includeLocal=true&pageSize=20";
-  var xmlhttp = new XMLHttpRequest();
-  xmlhttp.open("GET", url, true);
-  var auth = window.btoa(localStorage["loginUsername"] + ":" + localStorage["loginPassword"]);
-  xmlhttp.setRequestHeader('Authorization', 'Basic ' + auth);
-  xmlhttp.onreadystatechange=function() {
-    if (xmlhttp.readyState == 4) {
-      if (xmlhttp.status === 200) {
-        obj = JSON.parse(xmlhttp.responseText);
-        console.log(obj);
+  handle.pageSize(100);
+  handle.params['includeLocal'] = true;
 
-        $("#tableRecent tr").remove();
-        for (var item in obj.items) {
-          date = new Date(obj.items[item].callStarted);
-          from = obj.items[item].from.replace(/.*\<|\>/gi,'');;
-          to = obj.items[item].to.replace(/.*\<|\>/gi,'');;
-          status = obj.items[item].outcome;
-          
-          if ( obj.items[item].links.recordings ) {
-            recording = obj.items[item].links.recordings;
-            console.log(recording);
-          } else {
-            console.log('No recording');
-          }
+  handle.failed(function(response, status){
+    console.log(response);
+  });
 
-          if (status == "answered" || status == "ANSWERED") {
-            status = '<span class="label label-info right">Answered</span>';
-          } else if (status == "busy" || status == "BUSY") {
-            status = '<span class="label right">Busy</span>';
-          } else if (status == "no-answer" || status == "NO_ANSWER") {
-            status = '<span class="label right">No Answer</span>';
-          } else if (status == "failed" || status == "FAILED") {
-            status = '<span class="label label-important right">Failed</span>';
-          } else {
-            status = '<span class="label right">' + status + '</span>';
-          }
+  handle.loading(function(state){
+    loadingState(state);
+  });
 
-          if (from != localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']) {
-            from = '<a class="mutedLink" href="?number=' + from + '">' + from + '</a>';
-          }
-          if (to != localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']) {
-            to = '<a class="mutedLink" href="?number=' + to + '">' + to + '</a>';
-          }
+  handle.success(function(response, status){
 
-          if (to == localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] || from == localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']) {
-            $('#tableRecent').append('<tr><td><small>' + from + ' <i class="icon-arrow-right"></i> ' + to + '<br /><span class="muted">' + moment(date).format('HH:mm ddd Do') + '</span>' + status + '</small></td></tr>');
+    var items = response['items'];
+    
+    $("#tableRecent tr").remove();
 
-          }
-        }
+    for (var item in items) {
+
+      var item = items[item];
+
+      date = new Date(item['callStarted']);
+      from = item['from'].replace(/.*\<|\>/gi,'');
+      to = item['to'].replace(/.*\<|\>/gi,'');
+      status = item['outcome'];
+      
+      // if ( item['links']['recordings'] ) {
+      //   recording = item['links']['recordings'];
+      //   console.log(recording);
+      // } else {
+      //   console.log('No recording');
+      // }
+
+      if (status == "answered" || status == "ANSWERED") {
+        status = '<span class="label label-info right">Answered</span>';
+      } else if (status == "busy" || status == "BUSY") {
+        status = '<span class="label right">Busy</span>';
+      } else if (status == "no-answer" || status == "NO_ANSWER") {
+        status = '<span class="label right">No Answer</span>';
+      } else if (status == "failed" || status == "FAILED") {
+        status = '<span class="label label-important right">Failed</span>';
+      } else {
+        status = '<span class="label right">' + status + '</span>';
       }
+
+      if (from != localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']) {
+        from = '<a class="mutedLink" href="?number=' + from + '">' + from + '</a>';
+      }
+      if (to != localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']) {
+        to = '<a class="mutedLink" href="?number=' + to + '">' + to + '</a>';
+      }
+
+      if (to == localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort'] || from == localStorage[localStorage['loginUsername'] + '_prefMainExtensionShort']) {
+        $('#tableRecent').append('<tr><td><small>' + from + ' <i class="icon-arrow-right"></i> ' + to + '<br /><span class="muted">' + moment(date).format('HH:mm ddd Do') + '</span>' + status + '</small></td></tr>');
+      }
+
     }
-  }
-  xmlhttp.send(null);
+
+  });
+
+  handle.go();
 
 }
 
@@ -1080,6 +1085,17 @@ function notifyModal() {
     $('#smsNotifyOn').removeClass('btn-info');
   }
 
+  if ( localStorage[localStorage['loginUsername'] + '_prefCallLookupURL'] != "" ) {
+    $('#callLookupURL').val(localStorage[localStorage['loginUsername'] + '_prefCallLookupURL']);
+  }
+
+  $('#callLookupURL').keyup(function(){
+    var callerID = '0123456789';
+    var url = $('#callLookupURL').val();
+    var sample = url.replace("[callerid]",callerID);
+    $('#sampleLookupURL').text(sample);
+  });
+
 }
 
 function notifyConnect() {
@@ -1089,7 +1105,9 @@ function notifyConnect() {
 function notifySave() {
 
   var notifyTime = $('#notifyTimeInput').val();
-  if ( notifyTime >= 1 && notifyTime <= 20 ) {
+  if ( notifyTime >= 1 && notifyTime <= 20 || !notifyTime) {
+    var url = $('#callLookupURL').val();
+    localStorage[localStorage['loginUsername'] + '_prefCallLookupURL'] = url;
     localStorage[localStorage['loginUsername'] + '_notifyTime'] = notifyTime;
     $('#notifyModal').modal('hide');
   } else {
