@@ -1,5 +1,8 @@
 # chrome-extension
 
+***Warning: This project has been archived and is no longer updated. Please use [Nimvelo Chrome Extension](https://github.com/Nimvelo/chrome-extension) instead.***
+
+
 A Google Chrome extension which uses the Sipcentric REST API (BETA).
 
 Available on the [Chrome Web Store](https://chrome.google.com/webstore/detail/sipcentric-for-chrome/kpiopepamhnnileoefikeakookcblmpc).
